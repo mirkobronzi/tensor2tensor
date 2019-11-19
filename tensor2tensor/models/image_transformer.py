@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Tensor2Tensor Authors.
+# Copyright 2019 The Tensor2Tensor Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """image generation with transformer (attention).
 
 encoder: [Self-Attention, Feed-forward] x n
@@ -27,6 +28,7 @@ import copy
 from tensor2tensor.layers import common_hparams
 from tensor2tensor.layers import common_image_attention as cia
 from tensor2tensor.layers import common_layers
+from tensor2tensor.layers import modalities
 from tensor2tensor.utils import registry
 from tensor2tensor.utils import t2t_model
 
@@ -46,14 +48,11 @@ class Imagetransformer(t2t_model.T2TModel):
     hparams = copy.copy(self._hparams)
     targets = features["targets"]
     if (hparams.likelihood == cia.DistributionType.DMOL and
-        (hparams.target_modality != "image:image_channel_bottom_identity" or
-         hparams.num_channels != 1)):
-      raise ValueError("When using DMOL for the likelihood, target_modality "
-                       "must be image:image_channel_bottom_identity and "
-                       "num_channels must be 1.")
+        hparams.num_channels != 1):
+      raise ValueError("When using DMOL for the likelihood, bottom function "
+                       " must be identity and num_channels must be 1.")
     if (not tf.get_variable_scope().reuse and
-        hparams.mode != tf.contrib.learn.ModeKeys.INFER and
-        hparams.target_modality != "image:image_channel_bottom_identity"):
+        hparams.mode != tf.estimator.ModeKeys.PREDICT):
       tf.summary.image("targets", tf.to_float(targets), max_outputs=1)
 
     # Extra losses list if we want to use moe.
@@ -130,8 +129,8 @@ class Imagetransformer(t2t_model.T2TModel):
 class ImagetransformerMoe(t2t_model.T2TModel):
   """Conditional image generation with attention and MoE."""
 
-  @property
-  def use_body_sharded(self):
+  @staticmethod
+  def use_body_sharded():
     return True
 
   def body_sharded(self, sharded_features):
@@ -189,7 +188,8 @@ def image_transformer_base():
   hparams.optimizer_adam_beta1 = 0.9
   hparams.optimizer_adam_beta2 = 0.98
   hparams.label_smoothing = 0.0
-  hparams.target_modality = "image:identity"
+  hparams.bottom["targets"] = modalities.image_channel_embeddings_bottom
+  hparams.top["targets"] = modalities.identity_top
   hparams.norm_type = "layer"
   hparams.layer_prepostprocess_dropout = 0.0
   hparams.add_hparam("filter_size", 512)  # Add new ones like this.
@@ -221,7 +221,6 @@ def image_transformer_base():
   hparams.add_hparam("block_width", 128)
   hparams.add_hparam("num_encoder_layers", 4)
   hparams.add_hparam("num_decoder_layers", 12)
-  hparams.sep_rgb_embed = False
   hparams.add_hparam("dec_attention_type", cia.AttentionType.LOCAL_1D)
   hparams.add_hparam("block_raster_scan", False)
 
@@ -253,7 +252,97 @@ def imagetransformer_base():
 
 
 @registry.register_hparams
+def imagetransformer_cifar10_base():
+  """Best config for 2.90 bits/dim on CIFAR10 using cross entropy."""
+  hparams = image_transformer_base()
+  hparams.batch_size = 4
+  hparams.num_heads = 4
+  hparams.num_decoder_layers = 12
+  hparams.block_length = 256
+  hparams.hidden_size = 512
+  hparams.filter_size = 2048
+  hparams.learning_rate = 0.5
+  hparams.learning_rate_warmup_steps = 4000
+  hparams.layer_preprocess_sequence = "none"
+  hparams.layer_postprocess_sequence = "dan"
+  hparams.layer_prepostprocess_dropout = 0.3
+  hparams.unconditional = True
+  return hparams
+
+
+@registry.register_hparams
+def imagetransformer_cifar10_base_dmol():
+  """Best config for 2.90 bits/dim on CIFAR10 using DMOL."""
+  hparams = image_transformer_base()
+  hparams.likelihood = cia.DistributionType.DMOL
+  hparams.num_channels = 1
+  hparams.bottom["targets"] = modalities.image_channel_compress_targets_bottom
+  hparams.top["targets"] = modalities.identity_top
+  hparams.num_heads = 8
+  hparams.batch_size = 8
+  hparams.sampling_method = "random"
+  hparams.layer_preprocess_sequence = "n"
+  hparams.layer_postprocess_sequence = "da"
+  hparams.summarize_grads = True
+  hparams.hidden_size = 256
+  hparams.filter_size = 512
+  hparams.attention_key_channels = 512
+  hparams.attention_value_channels = 512
+  hparams.num_decoder_layers = 12
+  hparams.layer_prepostprocess_dropout = 0.1
+  hparams.learning_rate = 0.1
+  hparams.layer_preprocess_sequence = "none"
+  hparams.layer_postprocess_sequence = "dan"
+  hparams.pos = "emb"
+  hparams.unconditional = True
+  return hparams
+
+
+@registry.register_hparams
+def imagetransformer_base_tpu():
+  """Transformer base params for cifar-10."""
+  hparams = imagetransformer_bas8l_8h_big_uncond_dr03_imgnet()
+  update_hparams_for_tpu(hparams)
+  hparams.batch_size = 4
+  hparams.num_heads = 4   # heads are expensive on tpu
+  hparams.num_decoder_layers = 12
+  hparams.block_length = 128
+  hparams.hidden_size = 512
+  hparams.filter_size = 2048
+  hparams.learning_rate = 0.2
+  hparams.learning_rate_warmup_steps = 6000
+  hparams.layer_preprocess_sequence = "none"
+  hparams.layer_postprocess_sequence = "dan"
+  hparams.layer_prepostprocess_dropout = 0.3
+  return hparams
+
+
+@registry.register_hparams
+def imagetransformer_base_imagenet_tpu():
+  """Transformer base params for cifar-10."""
+  hparams = imagetransformer_base_tpu()
+  hparams.batch_size = 4
+  hparams.num_heads = 4   # heads are expensive on tpu
+  hparams.num_decoder_layers = 12
+  hparams.block_length = 128
+  hparams.layer_preprocess_sequence = "none"
+  hparams.layer_postprocess_sequence = "dan"
+  hparams.layer_prepostprocess_dropout = 0.1
+  return hparams
+
+
+@registry.register_hparams
+def imagetransformer_imagenet32_base():
+  """Best config for ImageNet-32 with 3.77 bits/dim using cross entropy."""
+  hparams = imagetransformer_cifar10_base()
+  hparams.batch_size = 4
+  hparams.layer_prepostprocess_dropout = 0.1
+  return hparams
+
+
+@registry.register_hparams
 def imagetransformer_base_rel():
+  """Base with relative attention."""
   hparams = imagetransformer_base()
   hparams.dec_attention_type = cia.AttentionType.RELATIVE_LOCAL_1D
   return hparams
@@ -329,7 +418,8 @@ def imagetransformerpp_sep_channels_8l_8h():
   hparams = imagetransformer_base()
   hparams.likelihood = cia.DistributionType.DMOL
   hparams.num_channels = 1
-  hparams.target_modality = "image:image_channel_bottom_identity"
+  hparams.bottom["targets"] = modalities.image_channel_compress_targets_bottom
+  hparams.top["targets"] = modalities.identity_top
   hparams.num_heads = 8
   hparams.batch_size = 4
   hparams.attention_key_channels = hparams.attention_value_channels = 0
@@ -700,7 +790,6 @@ def imagetransformer_sep_channels_16l_16h_imgnet_lrg_loc_128():
 def imagetransformer_sep_output_channels_8l_local_and_global_att():
   """separate rgb embeddings."""
   hparams = imagetransformer_sep_channels_8l()
-  hparams.sep_rgb_embed = True
   hparams.sampling_method = "random"
   hparams.local_and_global_att = True
   return hparams
@@ -793,7 +882,8 @@ def imagetransformerpp_tiny():
   hparams = imagetransformer_tiny()
   hparams.likelihood = cia.DistributionType.DMOL
   hparams.num_channels = 1
-  hparams.target_modality = "image:image_channel_bottom_identity"
+  hparams.bottom["targets"] = modalities.image_channel_compress_targets_bottom
+  hparams.top["targets"] = modalities.identity_top
   return hparams
 
 
@@ -841,23 +931,10 @@ def imagetransformer_moe_tiny():
 
 
 def update_hparams_for_tpu(hparams):
-  hparams.optimizer = "TrueAdam"
+  hparams.optimizer = "Adafactor"
+  hparams.learning_rate_schedule = "rsqrt_decay"
+  hparams.learning_rate_warmup_steps = 6000
   hparams.batch_size = 4
-
-
-@registry.register_hparams
-def imagetransformer_base_tpu():
-  """Transformer base params for cifar-10."""
-  hparams = imagetransformer_bas8l_8h_big_uncond_dr03_imgnet()
-  update_hparams_for_tpu(hparams)
-  hparams.batch_size = 4
-  hparams.num_heads = 4   # heads are expensive on tpu
-  hparams.num_decoder_layers = 12
-  hparams.block_length = 128
-  hparams.layer_preprocess_sequence = "none"
-  hparams.layer_postprocess_sequence = "dan"
-  hparams.layer_prepostprocess_dropout = 0.3
-  return hparams
 
 
 @registry.register_hparams
@@ -880,7 +957,7 @@ def imagetransformer_b10l_4h_big_uncond_dr03_tpu():
   hparams.num_heads = 4   # heads are expensive on tpu
   hparams.num_decoder_layers = 10
   hparams.block_length = 128
-  hparams.hidden_size = 256
+  hparams.hidden_size = 512
   hparams.filter_size = 1024
   hparams.learning_rate = 0.2
   hparams.layer_preprocess_sequence = "none"
@@ -1005,11 +1082,14 @@ def imagetransformer_b12l_4h_b128_h512_uncond_dr03_tpu():
 
 
 @registry.register_hparams
-def imagetransformer_b12l_4h_b128_h512_uncond_dr03_im():
+def imagetransformer_b12l_4h_b128_h512_uncond_dr01_im():
   """TPU related imagenet model."""
   hparams = imagetransformer_b12l_4h_b256_uncond_dr03_tpu()
   update_hparams_for_tpu(hparams)
   hparams.batch_size = 4
+  hparams.optimizer = "Adafactor"
+  hparams.learning_rate_schedule = "rsqrt_decay"
+  hparams.learning_rate_warmup_steps = 6000
   hparams.layer_prepostprocess_dropout = 0.1
   return hparams
 
@@ -1039,7 +1119,10 @@ def imagetransformer_b12l_4h_b128_uncond_dr03_tpu():
   hparams.filter_size = 2048
   hparams.layer_preprocess_sequence = "none"
   hparams.layer_postprocess_sequence = "dan"
-  hparams.layer_prepostprocess_dropout = 0.3
+  hparams.layer_prepostprocess_dropout = 0.1
+  hparams.optimizer = "Adafactor"
+  hparams.learning_rate_schedule = "rsqrt_decay"
+  hparams.learning_rate_warmup_steps = 10000
   return hparams
 
 

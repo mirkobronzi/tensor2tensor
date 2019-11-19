@@ -9,20 +9,17 @@ welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CO
 [![Gitter](https://img.shields.io/gitter/room/nwjs/nw.js.svg)](https://gitter.im/tensor2tensor/Lobby)
 [![License](https://img.shields.io/badge/License-Apache%202.0-brightgreen.svg)](https://opensource.org/licenses/Apache-2.0)
 [![Travis](https://img.shields.io/travis/tensorflow/tensor2tensor.svg)](https://travis-ci.org/tensorflow/tensor2tensor)
+[![Run on FH](https://static.floydhub.com/button/button-small.svg)](https://floydhub.com/run)
 
 [Tensor2Tensor](https://github.com/tensorflow/tensor2tensor), or
 [T2T](https://github.com/tensorflow/tensor2tensor) for short, is a library
 of deep learning models and datasets designed to make deep learning more
 accessible and [accelerate ML
 research](https://research.googleblog.com/2017/06/accelerating-deep-learning-research.html).
-T2T is actively used and maintained by researchers and engineers within the
+T2T was developed by researchers and engineers in the
 [Google Brain team](https://research.google.com/teams/brain/) and a community
-of users. We're eager to collaborate with you too, so feel free to
-[open an issue on GitHub](https://github.com/tensorflow/tensor2tensor/issues)
-or send along a pull request (see [our contribution doc](CONTRIBUTING.md)).
-You can chat with us on
-[Gitter](https://gitter.im/tensor2tensor/Lobby) and join the
-[T2T Google Group](https://groups.google.com/forum/#!forum/tensor2tensor).
+of users. It is now in maintenance mode &mdash; we keep it running and welcome
+bug-fixes, but encourage users to use the successor library [Trax](https://github.com/google/trax).
 
 ### Quick Start
 
@@ -46,6 +43,8 @@ pip install tensor2tensor && t2t-trainer \
 ### Contents
 
 * [Suggested Datasets and Models](#suggested-datasets-and-models)
+  * [Mathematical Language Understanding](#mathematical-language-understanding)
+  * [Story, Question and Answer](#story-question-and-answer)
   * [Image Classification](#image-classification)
   * [Image Generation](#image-generation)
   * [Language Modeling](#language-modeling)
@@ -66,6 +65,7 @@ pip install tensor2tensor && t2t-trainer \
 * [Adding your own components](#adding-your-own-components)
 * [Adding a dataset](#adding-a-dataset)
 * [Papers](#papers)
+* [Run on FloydHub](#run-on-floydhub)
 
 ## Suggested Datasets and Models
 
@@ -75,6 +75,35 @@ We give the problem and model below and we suggest a setting of
 hyperparameters that we know works well in our setup. We usually
 run either on Cloud TPUs or on 8-GPU machines; you might need
 to modify the hyperparameters if you run on a different setup.
+
+### Mathematical Language Understanding
+
+For evaluating mathematical expressions at the character level involving addition, subtraction and multiplication of both positive and negative decimal numbers with variable digits assigned to symbolic variables, use
+
+* the [MLU](https://art.wangperawong.com/mathematical_language_understanding_train.tar.gz) data-set:
+ `--problem=algorithmic_math_two_variables`
+
+You can try solving the problem with different transformer models and hyperparameters as described in the [paper](https://arxiv.org/abs/1812.02825):
+* Standard transformer:
+`--model=transformer`
+`--hparams_set=transformer_tiny`
+* Universal transformer:
+`--model=universal_transformer`
+`--hparams_set=universal_transformer_tiny`
+* Adaptive universal transformer:
+`--model=universal_transformer`
+`--hparams_set=adaptive_universal_transformer_tiny`
+
+### Story, Question and Answer
+
+For answering questions based on a story, use
+
+* the [bAbi](https://research.fb.com/downloads/babi/) data-set:
+ `--problem=babi_qa_concat_task1_1k`
+
+You can choose the bAbi task from the range [1,20] and the subset from 1k or
+10k. To combine test data from all tasks into a single test set, use
+`--problem=babi_qa_concat_all_tasks_10k`
 
 ### Image Classification
 
@@ -113,9 +142,13 @@ For (un)conditional image generation, we have a number of standard data-sets:
     32x32 or `--problem=image_imagenet64_gen_rev` for 64x64.
 
 We suggest to use the Image Transformer, i.e., `--model=imagetransformer`, or
-variational auto-encoder, i.e., `--model=transformer_ae`. For CIFAR-10, using
-`--hparams_set=imagetransformerpp_base_12l_8h_big_uncond_dr03_dan_m` yields 2.90
-bits per dimension.
+the Image Transformer Plus, i.e., `--model=imagetransformerpp` that uses
+discretized mixture of logistics, or variational auto-encoder, i.e.,
+`--model=transformer_ae`.
+For CIFAR-10, using `--hparams_set=imagetransformer_cifar10_base` or
+`--hparams_set=imagetransformer_cifar10_base_dmol` yields 2.90 bits per
+dimension. For Imagenet-32, using
+`--hparams_set=imagetransformer_imagenet32_base` yields 3.77 bits per dimension.
 
 ### Language Modeling
 
@@ -173,6 +206,7 @@ There are a number of translation data-sets in T2T:
 * English-Czech: `--problem=translate_encs_wmt32k`
 * English-Chinese: `--problem=translate_enzh_wmt32k`
 * English-Vietnamese: `--problem=translate_envi_iwslt32k`
+* English-Spanish: `--problem=translate_enes_wmt32k`
 
 You can get translations in the other direction by appending `_rev` to
 the problem name, e.g., for German-English use
@@ -188,6 +222,8 @@ which is close to state-of-the art. If training on a single GPU, try the
 `--hparams_set=transformer_base_single_gpu` setting. For very good results
 or larger data-sets (e.g., for English-French), try the big model
 with `--hparams_set=transformer_big`.
+
+See this [example](https://github.com/tensorflow/tensor2tensor/blob/master/tensor2tensor/notebooks/Transformer_translate.ipynb) to know how the translation works.
 
 ## Basics
 
@@ -296,8 +332,8 @@ python -c "from tensor2tensor.models.transformer import Transformer"
   request for public datasets!).
 * Models can be used with any dataset and input mode (or even multiple); all
   modality-specific processing (e.g. embedding lookups for text tokens) is done
-  with `Modality` objects, which are specified per-feature in the dataset/task
-  specification.
+  with `bottom` and `top` transformations, which are specified per-feature in the
+  model.
 * Support for multi-GPU machines and synchronous (1 master, many workers) and
   asynchronous (independent workers synchronizing through a parameter server)
   [distributed training](https://tensorflow.github.io/tensor2tensor/distributed_training.html).
@@ -307,54 +343,44 @@ python -c "from tensor2tensor.models.transformer import Transformer"
 
 ## T2T overview
 
-### Datasets
+### Problems
 
-**Datasets** are all standardized on `TFRecord` files with `tensorflow.Example`
-protocol buffers. All datasets are registered and generated with the
-[data
-generator](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/bin/t2t-datagen)
-and many common sequence datasets are already available for generation and use.
-
-### Problems and Modalities
-
-**Problems** define training-time hyperparameters for the dataset and task,
-mainly by setting input and output **modalities** (e.g. symbol, image, audio,
-label) and vocabularies, if applicable. All problems are defined either in
-[`problem_hparams.py`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/data_generators/problem_hparams.py)
-or are registered with `@registry.register_problem` (run `t2t-datagen` to see
-the list of all available problems).
-**Modalities**, defined in
-[`modality.py`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/utils/modality.py),
-abstract away the input and output data types so that **models** may deal with
-modality-independent tensors.
+**Problems** consist of features such as inputs and targets, and metadata such
+as each feature's modality (e.g. symbol, image, audio) and vocabularies. Problem
+features are given by a dataset, which is stored as a `TFRecord` file with
+`tensorflow.Example` protocol buffers. All
+problems are imported in
+[`all_problems.py`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/data_generators/all_problems.py)
+or are registered with `@registry.register_problem`. Run
+[`t2t-datagen`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/bin/t2t-datagen)
+to see the list of available problems and download them.
 
 ### Models
 
-**`T2TModel`s** define the core tensor-to-tensor transformation, independent of
-input/output modality or task. Models take dense tensors in and produce dense
-tensors that may then be transformed in a final step by a **modality** depending
-on the task (e.g. fed through a final linear transform to produce logits for a
-softmax over classes). All models are imported in the
+**`T2TModel`s** define the core tensor-to-tensor computation. They apply a
+default transformation to each input and output so that models may deal with
+modality-independent tensors (e.g. embeddings at the input; and a linear
+transform at the output to produce logits for a softmax over classes). All
+models are imported in the
 [`models` subpackage](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/models/__init__.py),
-inherit from `T2TModel` - defined in
-[`t2t_model.py`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/utils/t2t_model.py) -
+inherit from [`T2TModel`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/utils/t2t_model.py),
 and are registered with
 [`@registry.register_model`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/utils/registry.py).
 
 ### Hyperparameter Sets
 
-**Hyperparameter sets** are defined and registered in code with
-[`@registry.register_hparams`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/utils/registry.py)
-and are encoded in
-[`tf.contrib.training.HParams`](https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/training/python/training/hparam.py)
-objects. The `HParams` are available to both the problem specification and the
-model. A basic set of hyperparameters are defined in
+**Hyperparameter sets** are encoded in
+[`HParams`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/utils/hparam.py)
+objects, and are registered with
+[`@registry.register_hparams`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/utils/registry.py).
+Every model and problem has a `HParams`. A basic set of hyperparameters are
+defined in
 [`common_hparams.py`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/layers/common_hparams.py)
 and hyperparameter set functions can compose other hyperparameter set functions.
 
 ### Trainer
 
-The **trainer** binary is the main entrypoint for training, evaluation, and
+The **trainer** binary is the entrypoint for training, evaluation, and
 inference. Users can easily switch between problems, models, and hyperparameter
 sets by using the `--model`, `--problem`, and `--hparams_set` flags. Specific
 hyperparameters can be overridden with the `--hparams` flag. `--schedule` and
@@ -380,10 +406,31 @@ To add a new dataset, subclass
 [`Problem`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/data_generators/problem.py)
 and register it with `@registry.register_problem`. See
 [`TranslateEndeWmt8k`](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/data_generators/translate_ende.py)
-for an example.
-
-Also see the [data generators
+for an example. Also see the [data generators
 README](https://github.com/tensorflow/tensor2tensor/tree/master/tensor2tensor/data_generators/README.md).
+
+## Run on FloydHub
+
+[![Run on FloydHub](https://static.floydhub.com/button/button.svg)](https://floydhub.com/run)
+
+Click this button to open a [Workspace](https://blog.floydhub.com/workspaces/) on [FloydHub](https://www.floydhub.com/?utm_medium=readme&utm_source=tensor2tensor&utm_campaign=jul_2018). You can use the workspace to develop and test your code on a fully configured cloud GPU machine.
+
+Tensor2Tensor comes preinstalled in the environment, you can simply open a [Terminal](https://docs.floydhub.com/guides/workspace/#using-terminal) and run your code.
+
+```bash
+# Test the quick-start on a Workspace's Terminal with this command
+t2t-trainer \
+  --generate_data \
+  --data_dir=./t2t_data \
+  --output_dir=./t2t_train/mnist \
+  --problem=image_mnist \
+  --model=shake_shake \
+  --hparams_set=shake_shake_quick \
+  --train_steps=1000 \
+  --eval_steps=100
+```
+
+Note: Ensure compliance with the FloydHub [Terms of Service](https://www.floydhub.com/about/terms).
 
 ## Papers
 
@@ -423,5 +470,9 @@ T2T](https://research.googleblog.com/2017/06/accelerating-deep-learning-research
 * [Fast Decoding in Sequence Models using Discrete Latent Variables](https://arxiv.org/abs/1803.03382)
 * [Adafactor: Adaptive Learning Rates with Sublinear Memory Cost](https://arxiv.org/abs/1804.04235)
 * [Universal Transformers](https://arxiv.org/abs/1807.03819)
+* [Attending to Mathematical Language with Transformers](https://arxiv.org/abs/1812.02825)
+* [The Evolved Transformer](https://arxiv.org/abs/1901.11117)
+* [Model-Based Reinforcement Learning for Atari](https://arxiv.org/abs/1903.00374)
+* [VideoFlow: A Flow-Based Generative Model for Video](https://arxiv.org/abs/1903.01434)
 
-*Note: This is not an official Google product.*
+*NOTE: This is not an official Google product.*

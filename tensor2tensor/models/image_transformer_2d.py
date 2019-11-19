@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Tensor2Tensor Authors.
+# Copyright 2019 The Tensor2Tensor Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """image generation with transformer (attention).
 
 encoder: [Self-Attention, Feed-forward] x n
@@ -28,6 +29,7 @@ import numpy as np
 from tensor2tensor.layers import common_hparams
 from tensor2tensor.layers import common_image_attention as cia
 from tensor2tensor.layers import common_layers
+from tensor2tensor.layers import modalities
 from tensor2tensor.utils import registry
 from tensor2tensor.utils import t2t_model
 
@@ -44,7 +46,7 @@ class Imagetransformer2d(t2t_model.T2TModel):
     targets = features["targets"]
     targets_shape = common_layers.shape_list(targets)
     if not (tf.get_variable_scope().reuse or
-            hparams.mode == tf.contrib.learn.ModeKeys.INFER):
+            hparams.mode == tf.estimator.ModeKeys.PREDICT):
       tf.summary.image("targets", targets, max_outputs=1)
 
     decoder_input, rows, cols = cia.prepare_decoder(
@@ -74,7 +76,7 @@ class Img2imgTransformer(t2t_model.T2TModel):
     targets = features["targets"]
     inputs = features["inputs"]
     if not (tf.get_variable_scope().reuse or
-            hparams.mode == tf.contrib.learn.ModeKeys.INFER):
+            hparams.mode == tf.estimator.ModeKeys.PREDICT):
       tf.summary.image("inputs", inputs, max_outputs=1)
       tf.summary.image("targets", targets, max_outputs=1)
 
@@ -104,13 +106,13 @@ class Img2imgTransformerBlockParallel(t2t_model.T2TModel):
 
   def body(self, features):
     assert self._hparams.block_size > 0
-    assert not common_layers.is_on_tpu()
+    assert not common_layers.is_xla_compiled()
 
     hparams = copy.copy(self._hparams)
     targets = features["targets"]
     inputs = features["inputs"]
     if not (tf.get_variable_scope().reuse or
-            hparams.mode == tf.contrib.learn.ModeKeys.INFER):
+            hparams.mode == tf.estimator.ModeKeys.PREDICT):
       tf.summary.image("inputs", inputs, max_outputs=1)
       tf.summary.image("targets", targets, max_outputs=1)
 
@@ -380,7 +382,9 @@ def image_transformer2d_base():
   hparams.optimizer_adam_beta1 = 0.9
   hparams.optimizer_adam_beta2 = 0.98
   hparams.label_smoothing = 0.0
-  hparams.target_modality = "image:identity"
+  hparams.bottom["targets"] = modalities.make_targets_bottom(
+      modalities.image_channel_embeddings_bottom)
+  hparams.top["targets"] = modalities.identity_top
   hparams.norm_type = "layer"
   hparams.layer_prepostprocess_dropout = 0.0
   hparams.add_hparam("filter_size", 512)  # Add new ones like this.
@@ -422,6 +426,9 @@ def image_transformer2d_base():
   hparams.add_hparam("kv_filter_width", 1)
 
   hparams.add_hparam("unconditional", False)  # unconditional generation
+
+  # relative embedding hparams
+  hparams.add_hparam("shared_rel", False)
   return hparams
 
 
@@ -588,6 +595,7 @@ def img2img_transformer2d_base():
   hparams.filter_size = 2048
   hparams.num_encoder_layers = 4
   hparams.num_decoder_layers = 8
+  hparams.bottom["inputs"] = modalities.image_channel_embeddings_bottom
   hparams.dec_attention_type = cia.AttentionType.LOCAL_2D
   hparams.block_raster_scan = True
   return hparams
@@ -778,7 +786,7 @@ def imagetransformer2d_tiny():
 
 def update_hparams_for_tpu(hparams):
   hparams.use_pad_remover = False  # where op not supported
-  hparams.optimizer = "TrueAdam"
+  hparams.optimizer = "true_adam"
   hparams.batch_size = 4
 
 

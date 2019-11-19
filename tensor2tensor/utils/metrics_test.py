@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Tensor2Tensor Authors.
+# Copyright 2019 The Tensor2Tensor Authors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 """Tests for tensor2tensor.utils.metrics."""
 from __future__ import absolute_import
 from __future__ import division
@@ -55,6 +56,26 @@ class MetricsTest(tf.test.TestCase):
     self.assertAlmostEqual(actual1, expected)
     self.assertAlmostEqual(actual2, 1.0)
 
+  def testPrefixAccuracy(self):
+    vocab_size = 10
+    predictions = tf.one_hot(
+        tf.constant([[[1], [2], [3], [4], [9], [6], [7], [8]],
+                     [[1], [2], [3], [4], [5], [9], [7], [8]],
+                     [[1], [2], [3], [4], [5], [9], [7], [0]]]),
+        vocab_size)
+    labels = tf.expand_dims(
+        tf.constant([[[1], [2], [3], [4], [5], [6], [7], [8]],
+                     [[1], [2], [3], [4], [5], [6], [7], [8]],
+                     [[1], [2], [3], [4], [5], [6], [7], [0]]]),
+        axis=-1)
+    expected_accuracy = np.average([4.0 / 8.0,
+                                    5.0 / 8.0,
+                                    5.0 / 7.0])
+    accuracy, _ = metrics.prefix_accuracy(predictions, labels)
+    with self.test_session() as session:
+      accuracy_value = session.run(accuracy)
+      self.assertAlmostEqual(expected_accuracy, accuracy_value)
+
   def testSequenceAccuracyMetric(self):
     predictions = np.random.randint(4, size=(12, 12, 12, 1))
     targets = np.random.randint(4, size=(12, 12, 12, 1))
@@ -69,6 +90,27 @@ class MetricsTest(tf.test.TestCase):
       actual = session.run(a)
     self.assertEqual(actual, expected)
 
+  def testTwoClassAccuracyMetric(self):
+    predictions = tf.constant([0.0, 0.2, 0.4, 0.6, 0.8, 1.0], dtype=tf.float32)
+    targets = tf.constant([0, 0, 1, 0, 1, 1], dtype=tf.int32)
+    expected = 2.0 / 3.0
+    with self.test_session() as session:
+      accuracy, _ = metrics.two_class_accuracy(predictions, targets)
+      session.run(tf.global_variables_initializer())
+      session.run(tf.local_variables_initializer())
+      actual = session.run(accuracy)
+    self.assertAlmostEqual(actual, expected)
+
+  def testTwoClassLogLikelihood(self):
+    predictions = np.array([0.0, 0.2, 0.4, 0.6, 0.8, 1.0])
+    targets = np.array([0, 0, 1, 0, 1, 1])
+    expected = (2.0 * np.log(0.8) + 2.0 * np.log(0.4)) / 6.0
+    with self.test_session() as session:
+      avg_log_likelihood, _ = metrics.two_class_log_likelihood(
+          predictions, targets)
+      actual = session.run(avg_log_likelihood)
+    self.assertAlmostEqual(actual, expected)
+
   def testRMSEMetric(self):
     predictions = np.full((10, 1), 1)  # All 1's
     targets = np.full((10, 1), 3)  # All 3's
@@ -79,6 +121,18 @@ class MetricsTest(tf.test.TestCase):
           tf.constant(targets, dtype=tf.int32))
       session.run(tf.global_variables_initializer())
       actual = session.run(rmse)
+    self.assertEqual(actual, expected)
+
+  def testUnpaddedRMSEMetric(self):
+    predictions = np.full((10, 1), 1)  # All 1's
+    targets = np.full((10, 1), 3)  # All 3's
+    expected = np.mean((predictions - targets)**2)  # MSE = 4.0
+    with self.test_session() as session:
+      mse, _ = metrics.unpadded_mse(
+          tf.constant(predictions, dtype=tf.int32),
+          tf.constant(targets, dtype=tf.int32))
+      session.run(tf.global_variables_initializer())
+      actual = session.run(mse)
     self.assertEqual(actual, expected)
 
   def testSequenceEditDistanceMetric(self):
@@ -104,6 +158,42 @@ class MetricsTest(tf.test.TestCase):
     self.assertAlmostEqual(actual_scores, 3.0 / 13)
     self.assertEqual(actual_weight, 13)
 
+  def testWordErrorRateMetric(self):
+
+    # Ensure availability of the WER metric function in the dictionary.
+    assert metrics.Metrics.WORD_ERROR_RATE in metrics.METRICS_FNS
+
+    # Test if WER is computed correctly.
+    ref = np.asarray([
+        # a b c
+        [97, 34, 98, 34, 99],
+        [97, 34, 98, 34, 99],
+        [97, 34, 98, 34, 99],
+        [97, 34, 98, 34, 99],
+    ])
+
+    hyp = np.asarray([
+        [97, 34, 98, 34, 99],  # a b c
+        [97, 34, 98, 0, 0],  # a b
+        [97, 34, 98, 34, 100],  # a b d
+        [0, 0, 0, 0, 0]  # empty
+    ])
+
+    labels = np.reshape(ref, ref.shape + (1, 1))
+    predictions = np.zeros((len(ref), np.max([len(s) for s in hyp]), 1, 1, 256))
+
+    for i, sample in enumerate(hyp):
+      for j, idx in enumerate(sample):
+        predictions[i, j, 0, 0, idx] = 1
+
+    with self.test_session() as session:
+      actual_wer, unused_actual_ref_len = session.run(
+          metrics.word_error_rate(predictions, labels))
+
+    expected_wer = 0.417
+    places = 3
+    self.assertAlmostEqual(round(actual_wer, places), expected_wer, places)
+
   def testNegativeLogPerplexity(self):
     predictions = np.random.randint(4, size=(12, 12, 12, 1))
     targets = np.random.randint(4, size=(12, 12, 12, 1))
@@ -115,6 +205,39 @@ class MetricsTest(tf.test.TestCase):
       session.run(tf.global_variables_initializer())
       actual = session.run(a)
     self.assertEqual(actual.shape, ())
+
+  def testNegativeLogPerplexityMasked(self):
+    predictions = np.random.randint(4, size=(12, 12, 12, 1))
+    targets = np.random.randint(4, size=(12, 12, 12, 1))
+    features = {
+        'targets_mask': tf.to_float(tf.ones([12, 12]))
+    }
+    with self.test_session() as session:
+      scores, _ = metrics.padded_neg_log_perplexity_with_masking(
+          tf.one_hot(predictions, depth=4, dtype=tf.float32),
+          tf.constant(targets, dtype=tf.int32),
+          features)
+      a = tf.reduce_mean(scores)
+      session.run(tf.global_variables_initializer())
+      actual = session.run(a)
+    self.assertEqual(actual.shape, ())
+
+  def testNegativeLogPerplexityMaskedAssert(self):
+    predictions = np.random.randint(4, size=(12, 12, 12, 1))
+    targets = np.random.randint(4, size=(12, 12, 12, 1))
+    features = {}
+
+    with self.assertRaisesRegexp(
+        ValueError,
+        'masked_neg_log_perplexity requires targets_mask feature'):
+      with self.test_session() as session:
+        scores, _ = metrics.padded_neg_log_perplexity_with_masking(
+            tf.one_hot(predictions, depth=4, dtype=tf.float32),
+            tf.constant(targets, dtype=tf.int32),
+            features)
+        a = tf.reduce_mean(scores)
+        session.run(tf.global_variables_initializer())
+        _ = session.run(a)
 
   def testSigmoidAccuracyOneHot(self):
     logits = np.array([
@@ -134,6 +257,22 @@ class MetricsTest(tf.test.TestCase):
 
     with self.test_session() as session:
       score, _ = metrics.sigmoid_accuracy_one_hot(logits, labels)
+      session.run(tf.global_variables_initializer())
+      session.run(tf.local_variables_initializer())
+      s = session.run(score)
+    self.assertEqual(s, 0.5)
+
+  def testSigmoidAccuracy(self):
+    logits = np.array([
+        [-1., 1.],
+        [1., -1.],
+        [-1., 1.],
+        [1., -1.]
+    ])
+    labels = np.array([1, 0, 0, 1])
+
+    with self.test_session() as session:
+      score, _ = metrics.sigmoid_accuracy(logits, labels)
       session.run(tf.global_variables_initializer())
       session.run(tf.local_variables_initializer())
       s = session.run(score)
@@ -252,6 +391,20 @@ class MetricsTest(tf.test.TestCase):
       _ = session.run(a_op)
       actual = session.run(a)
     self.assertAlmostEqual(actual, expected, places=6)
+
+  def testPearsonCorrelationCoefficient(self):
+    predictions = np.random.rand(12, 1)
+    targets = np.random.rand(12, 1)
+
+    expected = np.corrcoef(np.squeeze(predictions), np.squeeze(targets))[0][1]
+    with self.test_session() as session:
+      pearson, _ = metrics.pearson_correlation_coefficient(
+          tf.constant(predictions, dtype=tf.float32),
+          tf.constant(targets, dtype=tf.float32))
+      session.run(tf.global_variables_initializer())
+      session.run(tf.local_variables_initializer())
+      actual = session.run(pearson)
+    self.assertAlmostEqual(actual, expected)
 
 
 if __name__ == '__main__':

@@ -20,7 +20,6 @@ research](https://research.googleblog.com/2017/06/accelerating-deep-learning-res
 
 * [Walkthrough](walkthrough.md): Install and run.
 * [IPython notebook](https://colab.research.google.com/github/tensorflow/tensor2tensor/blob/master/tensor2tensor/notebooks/hello_t2t.ipynb): Get a hands-on experience.
-* [Automatic Speech Recognition notebook](https://colab.research.google.com/github/tensorflow/tensor2tensor/blob/master/tensor2tensor/notebooks/asr_transformer.ipynb): Transcribe speech to text with a T2T model.
 
 ## Basics
 
@@ -33,7 +32,6 @@ research](https://research.googleblog.com/2017/06/accelerating-deep-learning-res
 * [Training on Google Cloud ML](cloud_mlengine.md)
 * [Training on Google Cloud TPUs](cloud_tpu.md)
 * [Distributed Training](distributed_training.md)
-# [Automatic Speech Recognition (ASR) with Transformer](tutorials/asr_with_transformer.md)
 
 ## Solving your task
 
@@ -113,6 +111,7 @@ There are a number of translation data-sets in T2T:
 * English-Czech: `--problem=translate_encs_wmt32k`
 * English-Chinese: `--problem=translate_enzh_wmt32k`
 * English-Vietnamese: `--problem=translate_envi_iwslt32k`
+* English-Spanish: `--problem=translate_enes_wmt32k`
 
 You can get translations in the other direction by appending `_rev` to
 the problem name, e.g., for German-English use
