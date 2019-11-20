@@ -21,11 +21,12 @@ from __future__ import print_function
 
 import os
 
-from tensor2tensor.data_generators import problem
+from tensor2tensor.data_generators import problem, cleaner_en_xx
 from tensor2tensor.data_generators import text_encoder
 from tensor2tensor.data_generators import text_problems
 from tensor2tensor.data_generators import translate
 from tensor2tensor.data_generators import wiki_lm
+from tensor2tensor.data_generators.translate import _preprocess_sgm
 from tensor2tensor.utils import registry
 
 import tensorflow as tf
@@ -304,3 +305,49 @@ class TranslateLocalData(translate.TranslateProblem):
     train = dataset_split == problem.DatasetSplit.TRAIN
     train_datasets = _ENDE_TRAIN_DATASETS + self.additional_training_datasets
     return train_datasets if train else _ENDE_EVAL_DATASETS
+
+  def generate_samples(
+      self,
+      data_dir,
+      tmp_dir,
+      dataset_split,
+      custom_iterator=text_problems.text2text_txt_iterator):
+    datasets = self.source_data_files(dataset_split)
+    tag = "dev"
+    datatypes_to_clean = None
+    if dataset_split == problem.DatasetSplit.TRAIN:
+      tag = "train"
+      datatypes_to_clean = self.datatypes_to_clean
+    data_path = extract_data(
+        tmp_dir, datasets, "%s-compiled-%s" % (self.name, tag),
+        datatypes_to_clean=datatypes_to_clean)
+
+    return custom_iterator(data_path + ".lang1", data_path + ".lang2")
+
+def extract_data(tmp_dir, datasets, filename, datatypes_to_clean=None):
+  datatypes_to_clean = datatypes_to_clean or []
+  lang1_out_fname = filename + ".lang1"
+  lang2_out_fname = filename + ".lang2"
+  if tf.gfile.Exists(lang1_out_fname) and tf.gfile.Exists(lang2_out_fname):
+    tf.logging.info("Skipping compile data, found files:\n%s\n%s", lang1_out_fname,
+                    lang2_out_fname)
+    return filename
+
+  lang1_filepath, lang2_filepath = FLAGS.parsing_path.split(',')
+
+  with tf.gfile.GFile(lang1_out_fname, mode="w") as lang1_resfile:
+    with tf.gfile.GFile(lang2_out_fname, mode="w") as lang2_resfile:
+      for example in text_problems.text2text_txt_iterator(
+          lang1_filepath, lang2_filepath):
+        line1res = _preprocess_sgm(example["inputs"], False)
+        line2res = _preprocess_sgm(example["targets"], False)
+        clean_pairs = [(line1res, line2res)]
+        if "txt" in datatypes_to_clean:
+          clean_pairs = cleaner_en_xx.clean_en_xx_pairs(clean_pairs)
+        for line1res, line2res in clean_pairs:
+          if line1res and line2res:
+            lang1_resfile.write(line1res)
+            lang1_resfile.write("\n")
+            lang2_resfile.write(line2res)
+            lang2_resfile.write("\n")
+  return filename
