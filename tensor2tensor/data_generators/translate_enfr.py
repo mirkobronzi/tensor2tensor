@@ -271,3 +271,36 @@ class TranslateEnfrWmtMulti64kPacked1k(TranslateEnfrWmtMulti64k):
   @property
   def targets_prefix(self):
     return "translate French English "
+
+
+
+_ENDE_TRAIN_DATASETS = [
+    [
+        "http://data.statmt.org/wmt18/translation-task/training-parallel-nc-v13.tgz",  # pylint: disable=line-too-long
+        ("training-parallel-nc-v13/news-commentary-v13.de-en.en",
+         "training-parallel-nc-v13/news-commentary-v13.de-en.de")
+    ]
+]
+
+_ENDE_EVAL_DATASETS = [
+    [
+        "http://data.statmt.org/wmt17/translation-task/dev.tgz",
+        ("dev/newstest2013.en", "dev/newstest2013.de")
+    ],
+]
+
+
+@registry.register_problem
+class TranslateLocalData(translate.TranslateProblem):
+  """Translation with muli-lingual vocabulary."""
+
+
+  @property
+  def additional_training_datasets(self):
+    """Allow subclasses to add training datasets."""
+    return []
+
+  def source_data_files(self, dataset_split):
+    train = dataset_split == problem.DatasetSplit.TRAIN
+    train_datasets = _ENDE_TRAIN_DATASETS + self.additional_training_datasets
+    return train_datasets if train else _ENDE_EVAL_DATASETS
