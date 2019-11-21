@@ -26,9 +26,9 @@ from tensor2tensor.data_generators import text_encoder
 from tensor2tensor.data_generators import text_problems
 from tensor2tensor.data_generators import translate
 from tensor2tensor.data_generators import wiki_lm
-from tensor2tensor.data_generators.text_problems import VocabType
+from tensor2tensor.data_generators.text_problems import VocabType, text2text_generate_encoded
 from tensor2tensor.data_generators.translate import _preprocess_sgm
-from tensor2tensor.utils import registry
+from tensor2tensor.utils import registry, mlperf_log
 
 import tensorflow as tf
 
@@ -325,7 +325,29 @@ class TranslateLocalData(translate.TranslateProblem):
       raise ValueError("Vocab %s not found" % vocab_filename)
     return text_encoder.TokenTextEncoder(vocab_filename, replace_oov="UNK")
 
-  def get_or_create_vocab(self, data_dir, tmp_dir, force_get=False):
+  def feature_encoders(self, data_dir):
+    target_encoder = self.get_or_create_vocab(data_dir, None, force_get=True, target=True)
+    encoders = {"targets": target_encoder}
+    if self.has_inputs:
+      encoder = self.get_or_create_vocab(data_dir, None, force_get=True, target=False)
+      encoders["inputs"] = encoder
+    return encoders
+
+  def generate_encoded_samples(self, data_dir, tmp_dir, dataset_split):
+    if dataset_split == problem.DatasetSplit.TRAIN:
+      mlperf_log.transformer_print(key=mlperf_log.PREPROC_TOKENIZE_TRAINING)
+    elif dataset_split == problem.DatasetSplit.EVAL:
+      mlperf_log.transformer_print(key=mlperf_log.PREPROC_TOKENIZE_EVAL)
+
+    generator = self.generate_samples(data_dir, tmp_dir, dataset_split)
+    encoder = self.get_or_create_vocab(data_dir, tmp_dir, target=False)
+    target_decoder = self.get_or_create_vocab(data_dir, tmp_dir, target=True)
+    return text2text_generate_encoded(generator, encoder, target_decoder,
+                                      has_inputs=self.has_inputs,
+                                      inputs_prefix=self.inputs_prefix,
+                                      targets_prefix=self.targets_prefix)
+
+  def get_or_create_vocab(self, data_dir, tmp_dir, target, force_get=False):
     if self.vocab_type == VocabType.CHARACTER:
       encoder = text_encoder.ByteTextEncoder()
     elif self.vocab_type == VocabType.SUBWORD:
@@ -343,10 +365,14 @@ class TranslateLocalData(translate.TranslateProblem):
             reserved_tokens=(
                 text_encoder.RESERVED_TOKENS + self.additional_reserved_tokens))
     elif self.vocab_type == VocabType.TOKEN:
-      vocab_filename = os.path.join(data_dir, self.vocab_filename)
+      vocab_filename = os.path.join(data_dir, 'vocab.{}'.format('target' if target else 'input'))
       if not os.path.exists(vocab_filename):
-        inputs, _ = get_input_target_names('train')
-        with open(inputs, 'r') as in_stream:
+        inputs, targets = get_input_target_names('train')
+        if target:
+          to_parse = targets
+        else:
+          to_parse = inputs
+        with open(to_parse, 'r') as in_stream:
           vocab = Vocab(in_stream)
           with open(vocab_filename, 'w') as out_stream:
             out_stream.write('\n'.join(vocab.reverse_vocab))
