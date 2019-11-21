@@ -274,26 +274,16 @@ class TranslateEnfrWmtMulti64kPacked1k(TranslateEnfrWmtMulti64k):
     return "translate French English "
 
 
-
-_ENDE_TRAIN_DATASETS = []
-
-_ENDE_EVAL_DATASETS = []
-
-
 @registry.register_problem
 class TranslateLocalData(translate.TranslateProblem):
-  """Translation with muli-lingual vocabulary."""
-
 
   @property
   def additional_training_datasets(self):
-    """Allow subclasses to add training datasets."""
+    # will be handled directly in generate_sample
     return []
 
   def source_data_files(self, dataset_split):
-    train = dataset_split == problem.DatasetSplit.TRAIN
-    train_datasets = _ENDE_TRAIN_DATASETS + self.additional_training_datasets
-    return train_datasets if train else _ENDE_EVAL_DATASETS
+      return []
 
   def generate_samples(
       self,
@@ -301,19 +291,19 @@ class TranslateLocalData(translate.TranslateProblem):
       tmp_dir,
       dataset_split,
       custom_iterator=text_problems.text2text_txt_iterator):
-    datasets = self.source_data_files(dataset_split)
     tag = "dev"
     datatypes_to_clean = None
     if dataset_split == problem.DatasetSplit.TRAIN:
       tag = "train"
       datatypes_to_clean = self.datatypes_to_clean
     data_path = extract_data(
-        tmp_dir, datasets, "%s-compiled-%s" % (self.name, tag),
+        tmp_dir, tag, "%s-compiled-%s" % (self.name, tag),
         datatypes_to_clean=datatypes_to_clean)
 
     return custom_iterator(data_path + ".lang1", data_path + ".lang2")
 
-def extract_data(tmp_dir, datasets, filename, datatypes_to_clean=None):
+
+def extract_data(tmp_dir, data_split, filename, datatypes_to_clean=None):
   datatypes_to_clean = datatypes_to_clean or []
   lang1_out_fname = filename + ".lang1"
   lang2_out_fname = filename + ".lang2"
@@ -322,9 +312,11 @@ def extract_data(tmp_dir, datasets, filename, datatypes_to_clean=None):
                     lang2_out_fname)
     return filename
 
-  lang1_filepath, lang2_filepath = FLAGS.parsing_path.split(',')
-  tf.logging.info('input file: {}'.format(lang1_filepath))
-  tf.logging.info('target file: {}'.format(lang2_filepath))
+  lang_file_path = FLAGS.parsing_path
+  lang1_filepath = lang_file_path + '.' + data_split + '.lang1'
+  lang2_filepath = lang_file_path + '.' + data_split + '.lang2'
+  tf.logging.info('input {} file: {}'.format(data_split, lang1_filepath))
+  tf.logging.info('target {} file: {}'.format(data_split, lang2_filepath))
 
   with tf.gfile.GFile(lang1_out_fname, mode="w") as lang1_resfile:
     with tf.gfile.GFile(lang2_out_fname, mode="w") as lang2_resfile:
