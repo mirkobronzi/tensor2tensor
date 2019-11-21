@@ -275,20 +275,9 @@ class TranslateEnfrWmtMulti64kPacked1k(TranslateEnfrWmtMulti64k):
 
 
 
-_ENDE_TRAIN_DATASETS = [
-    [
-        "http://data.statmt.org/wmt18/translation-task/training-parallel-nc-v13.tgz",  # pylint: disable=line-too-long
-        ("training-parallel-nc-v13/news-commentary-v13.de-en.en",
-         "training-parallel-nc-v13/news-commentary-v13.de-en.de")
-    ]
-]
+_ENDE_TRAIN_DATASETS = []
 
-_ENDE_EVAL_DATASETS = [
-    [
-        "http://data.statmt.org/wmt17/translation-task/dev.tgz",
-        ("dev/newstest2013.en", "dev/newstest2013.de")
-    ],
-]
+_ENDE_EVAL_DATASETS = []
 
 
 @registry.register_problem
