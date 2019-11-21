@@ -334,6 +334,8 @@ def extract_data(tmp_dir, datasets, filename, datatypes_to_clean=None):
     return filename
 
   lang1_filepath, lang2_filepath = FLAGS.parsing_path.split(',')
+  tf.logging.info('input file: {}'.format(lang1_filepath))
+  tf.logging.info('target file: {}'.format(lang2_filepath))
 
   with tf.gfile.GFile(lang1_out_fname, mode="w") as lang1_resfile:
     with tf.gfile.GFile(lang2_out_fname, mode="w") as lang2_resfile:
