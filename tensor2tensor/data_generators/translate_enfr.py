@@ -21,15 +21,18 @@ from __future__ import print_function
 
 import os
 
-from tensor2tensor.data_generators import problem, cleaner_en_xx
+from tensor2tensor.data_generators import problem, cleaner_en_xx, generator_utils
 from tensor2tensor.data_generators import text_encoder
 from tensor2tensor.data_generators import text_problems
 from tensor2tensor.data_generators import translate
 from tensor2tensor.data_generators import wiki_lm
+from tensor2tensor.data_generators.text_problems import VocabType
 from tensor2tensor.data_generators.translate import _preprocess_sgm
 from tensor2tensor.utils import registry
 
 import tensorflow as tf
+
+from tensor2tensor.utils.vocab import Vocab
 
 FLAGS = tf.flags.FLAGS
 
@@ -278,12 +281,26 @@ class TranslateEnfrWmtMulti64kPacked1k(TranslateEnfrWmtMulti64k):
 class TranslateLocalData(translate.TranslateProblem):
 
   @property
+  def source_vocab_name(self):
+    raise ValueError
+    return "%s.input" % self.vocab_filename
+
+  @property
+  def target_vocab_name(self):
+    raise ValueError
+    return "%s.target" % self.vocab_filename
+
+  @property
+  def vocab_type(self):
+    return VocabType.TOKEN
+
+  @property
   def additional_training_datasets(self):
     # will be handled directly in generate_sample
     return []
 
   def source_data_files(self, dataset_split):
-      return []
+      return ['asd']
 
   def generate_samples(
       self,
@@ -299,8 +316,46 @@ class TranslateLocalData(translate.TranslateProblem):
     data_path = extract_data(
         tmp_dir, tag, "%s-compiled-%s" % (self.name, tag),
         datatypes_to_clean=datatypes_to_clean)
-
     return custom_iterator(data_path + ".lang1", data_path + ".lang2")
+
+  def get_vocab(self, data_dir, is_target=False):
+    vocab_filename = os.path.join(data_dir,
+                                  self.target_vocab_name if is_target else self.source_vocab_name)
+    if not tf.gfile.Exists(vocab_filename):
+      raise ValueError("Vocab %s not found" % vocab_filename)
+    return text_encoder.TokenTextEncoder(vocab_filename, replace_oov="UNK")
+
+  def get_or_create_vocab(self, data_dir, tmp_dir, force_get=False):
+    if self.vocab_type == VocabType.CHARACTER:
+      encoder = text_encoder.ByteTextEncoder()
+    elif self.vocab_type == VocabType.SUBWORD:
+      if force_get:
+        vocab_filepath = os.path.join(data_dir, self.vocab_filename)
+        encoder = text_encoder.SubwordTextEncoder(vocab_filepath)
+      else:
+        other_problem = self.use_vocab_from_other_problem
+        if other_problem:
+          return other_problem.get_or_create_vocab(data_dir, tmp_dir, force_get)
+        encoder = generator_utils.get_or_generate_vocab_inner(
+            data_dir, self.vocab_filename, self.approx_vocab_size,
+            self.generate_text_for_vocab(data_dir, tmp_dir),
+            max_subtoken_length=self.max_subtoken_length,
+            reserved_tokens=(
+                text_encoder.RESERVED_TOKENS + self.additional_reserved_tokens))
+    elif self.vocab_type == VocabType.TOKEN:
+      vocab_filename = os.path.join(data_dir, self.vocab_filename)
+      if not os.path.exists(vocab_filename):
+        inputs, _ = get_input_target_names('train')
+        with open(inputs, 'r') as in_stream:
+          vocab = Vocab(in_stream)
+          with open(vocab_filename, 'w') as out_stream:
+            out_stream.write('\n'.join(vocab.reverse_vocab))
+      encoder = text_encoder.TokenTextEncoder(vocab_filename,
+                                              replace_oov=self.oov_token)
+    else:
+      raise ValueError(
+          "Unrecognized VocabType: %s" % str(self.vocab_type))
+    return encoder
 
 
 def extract_data(tmp_dir, data_split, filename, datatypes_to_clean=None):
@@ -312,9 +367,7 @@ def extract_data(tmp_dir, data_split, filename, datatypes_to_clean=None):
                     lang2_out_fname)
     return filename
 
-  lang_file_path = FLAGS.parsing_path
-  lang1_filepath = lang_file_path + '.' + data_split + '.lang1'
-  lang2_filepath = lang_file_path + '.' + data_split + '.lang2'
+  lang1_filepath, lang2_filepath = get_input_target_names(data_split)
   tf.logging.info('input {} file: {}'.format(data_split, lang1_filepath))
   tf.logging.info('target {} file: {}'.format(data_split, lang2_filepath))
 
@@ -334,3 +387,10 @@ def extract_data(tmp_dir, data_split, filename, datatypes_to_clean=None):
             lang2_resfile.write(line2res)
             lang2_resfile.write("\n")
   return filename
+
+
+def get_input_target_names(data_split):
+  lang_file_path = FLAGS.parsing_path
+  lang1_filepath = lang_file_path + '.' + data_split + '.lang1'
+  lang2_filepath = lang_file_path + '.' + data_split + '.lang2'
+  return lang1_filepath, lang2_filepath
