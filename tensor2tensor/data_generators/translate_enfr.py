@@ -26,6 +26,7 @@ from tensor2tensor.data_generators import text_encoder
 from tensor2tensor.data_generators import text_problems
 from tensor2tensor.data_generators import translate
 from tensor2tensor.data_generators import wiki_lm
+from tensor2tensor.data_generators.oov_text_encoder import OOVTokenTextEncoder
 from tensor2tensor.data_generators.text_encoder import EOS_ID
 from tensor2tensor.data_generators.text_problems import VocabType, text2text_generate_encoded
 from tensor2tensor.data_generators.translate import _preprocess_sgm
@@ -383,9 +384,10 @@ class TranslateLocalData(translate.TranslateProblem):
             text_encoder.EOS: text_encoder.EOS_ID}, max_vocab_size=max_vs)
           tf.logging.info("created vocab for {} with {} entries".format(
             'target' if target else 'input', vocab.size()))
+          assert vocab.get_tokens()[:3] == ['<pad>', '<EOS>', '<oov>']
           with open(vocab_filename, 'w') as out_stream:
             out_stream.write('\n'.join(vocab.reverse_vocab))
-      encoder = text_encoder.TokenTextEncoder(vocab_filename,
+      encoder = OOVTokenTextEncoder(vocab_filename,
                                               replace_oov=self.oov_token)
     else:
       raise ValueError(
