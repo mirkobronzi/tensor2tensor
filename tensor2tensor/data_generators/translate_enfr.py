@@ -26,6 +26,7 @@ from tensor2tensor.data_generators import text_encoder
 from tensor2tensor.data_generators import text_problems
 from tensor2tensor.data_generators import translate
 from tensor2tensor.data_generators import wiki_lm
+from tensor2tensor.data_generators.text_encoder import EOS_ID
 from tensor2tensor.data_generators.text_problems import VocabType, text2text_generate_encoded
 from tensor2tensor.data_generators.translate import _preprocess_sgm
 from tensor2tensor.utils import registry, mlperf_log
@@ -373,7 +374,8 @@ class TranslateLocalData(translate.TranslateProblem):
         else:
           to_parse = inputs
         with open(to_parse, 'r') as in_stream:
-          vocab = Vocab(in_stream)
+          vocab = Vocab(in_stream, insert_additional_symbols={
+            text_encoder.EOS: text_encoder.EOS_ID})
           with open(vocab_filename, 'w') as out_stream:
             out_stream.write('\n'.join(vocab.reverse_vocab))
       encoder = text_encoder.TokenTextEncoder(vocab_filename,
