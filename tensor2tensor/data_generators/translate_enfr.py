@@ -374,8 +374,15 @@ class TranslateLocalData(translate.TranslateProblem):
         else:
           to_parse = inputs
         with open(to_parse, 'r') as in_stream:
+
+          max_vs = FLAGS.max_target_vocab_size if target else FLAGS.max_input_vocab_size
+          if max_vs < 0:
+            max_vs = None
+
           vocab = Vocab(in_stream, insert_additional_symbols={
-            text_encoder.EOS: text_encoder.EOS_ID})
+            text_encoder.EOS: text_encoder.EOS_ID}, max_vocab_size=max_vs)
+          tf.logging.info("created vocab for {} with {} entries".format(
+            'target' if target else 'input', vocab.size()))
           with open(vocab_filename, 'w') as out_stream:
             out_stream.write('\n'.join(vocab.reverse_vocab))
       encoder = text_encoder.TokenTextEncoder(vocab_filename,

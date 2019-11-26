@@ -93,6 +93,9 @@ flags.DEFINE_string(
     "e.g. @registry.register_problem calls, that will then be "
     "available to t2t-datagen.")
 
+flags.DEFINE_integer("max_input_vocab_size", -1, "maximum vocab size - default +inf")
+flags.DEFINE_integer("max_target_vocab_size", -1, "maximum vocab size - default +inf")
+
 # Mapping from problems that we can generate data for to their generators.
 # pylint: disable=g-long-lambda
 _SUPPORTED_PROBLEM_GENERATORS = {
