@@ -38,8 +38,8 @@ class Vocab:
         """
 
         :param words: list of tokens - i.e., list of str
-        :param as_numpy:
-        :param pad_to:
+        :param as_numpy: return a numpy array/matrix
+        :param pad_to: will pad up to this length
         :return:
         """
         result = [self.vocab[word] if word in self.vocab else OOV_INDEX for word in words]
@@ -55,8 +55,8 @@ class Vocab:
         """
 
         :param sentences: list of sentences, i.e., list of list of tokens (str)
-        :param as_numpy:
-        :param pad:
+        :param as_numpy: return a numpy array/matrix
+        :param pad: will add pad symbol
         :return:
         """
         if pad:
