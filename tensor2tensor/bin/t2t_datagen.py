@@ -95,6 +95,7 @@ flags.DEFINE_string(
 
 flags.DEFINE_integer("max_input_vocab_size", -1, "maximum vocab size - default +inf")
 flags.DEFINE_integer("max_target_vocab_size", -1, "maximum vocab size - default +inf")
+flags.DEFINE_string("vocab_type", 'token', "vocab type: token / subword")
 
 # Mapping from problems that we can generate data for to their generators.
 # pylint: disable=g-long-lambda

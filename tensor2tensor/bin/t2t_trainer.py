@@ -146,6 +146,7 @@ flags.DEFINE_bool("gpu_automatic_mixed_precision", False,
                   "(via graph rewrite and dynamic loss scaling).")
 
 
+flags.DEFINE_string("vocab_type", 'token', "vocab type: token / subword")
 
 def set_hparams_from_args(args):
   """Set hparams overrides from unparsed args list."""

@@ -350,9 +350,7 @@ class TranslateLocalData(translate.TranslateProblem):
                                       targets_prefix=self.targets_prefix)
 
   def get_or_create_vocab(self, data_dir, tmp_dir, target, force_get=False):
-    if self.vocab_type == VocabType.CHARACTER:
-      encoder = text_encoder.ByteTextEncoder()
-    elif self.vocab_type == VocabType.SUBWORD:
+    if FLAGS.vocab_type == 'subword':
       if force_get:
         vocab_filepath = os.path.join(data_dir, self.vocab_filename)
         encoder = text_encoder.SubwordTextEncoder(vocab_filepath)
@@ -366,7 +364,7 @@ class TranslateLocalData(translate.TranslateProblem):
             max_subtoken_length=self.max_subtoken_length,
             reserved_tokens=(
                 text_encoder.RESERVED_TOKENS + self.additional_reserved_tokens))
-    elif self.vocab_type == VocabType.TOKEN:
+    elif FLAGS.vocab_type == 'token':
       vocab_filename = os.path.join(data_dir, 'vocab.{}'.format('target' if target else 'input'))
       if not os.path.exists(vocab_filename):
         inputs, targets = get_input_target_names('train')
@@ -391,9 +389,20 @@ class TranslateLocalData(translate.TranslateProblem):
                                               replace_oov=self.oov_token)
     else:
       raise ValueError(
-          "Unrecognized VocabType: %s" % str(self.vocab_type))
+          "Unrecognized VocabType: %s" % str(FLAGS.vocab_type))
     return encoder
 
+  def generate_text_for_vocab(self, data_dir, tmp_dir):
+    lang1_filepath, lang2_filepath = get_input_target_names('train')
+    # note this is a shared vocab - so we go over both train files
+
+    def generator():
+      for file_path in [lang1_filepath, lang2_filepath]:
+        with tf.gfile.GFile(file_path, mode="r") as file_stream:
+          for line in file_stream:
+            yield line
+
+    return generator()
 
 def extract_data(tmp_dir, data_split, filename, datatypes_to_clean=None):
   datatypes_to_clean = datatypes_to_clean or []
