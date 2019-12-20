@@ -21,7 +21,8 @@ from __future__ import print_function
 
 import os
 
-from tensor2tensor.data_generators import problem, cleaner_en_xx, generator_utils
+from tensor2tensor.data_generators import problem, cleaner_en_xx, generator_utils, multi_problem, \
+    translate_ende, translate_enro
 from tensor2tensor.data_generators import text_encoder
 from tensor2tensor.data_generators import text_problems
 from tensor2tensor.data_generators import translate
@@ -440,3 +441,28 @@ def get_input_target_names(data_split):
   lang1_filepath = lang_file_path + '.' + data_split + '.lang1'
   lang2_filepath = lang_file_path + '.' + data_split + '.lang2'
   return lang1_filepath, lang2_filepath
+
+@registry.register_problem
+class LanguagemodelMultiLocalData(multi_problem.MultiProblem):
+  """Wiki multi-lingual LM and multiple translations."""
+
+  def __init__(self, was_reversed=False, was_copy=False):
+    super(LanguagemodelMultiLocalData, self).__init__(
+        was_reversed, was_copy)
+    self.task_list.append(wiki_lm.LanguagemodelDeEnFrRoWiki64k())
+    self.task_list.append(translate_ende.TranslateEndeWmtMulti64k())
+    self.task_list.append(TranslateEnfrWmtMulti64k())
+    # self.task_list.append(translate_ende.TranslateEndeWmtMulti64k(
+    #     was_reversed=True))
+    # self.task_list.append(TranslateEnfrWmtMulti64k(
+    #     was_reversed=True))
+    # self.task_list.append(translate_enro.TranslateEnroWmtMultiTiny64k(
+    #     was_reversed=True))
+    # self.task_list.append(
+    #     cnn_dailymail.SummarizeCnnDailymailWikiLMMultiVocab64k())
+    # self.task_list.append(multinli.MultiNLIWikiLMMultiVocab64k())
+    # self.task_list.append(squad.SquadConcatMulti64k())
+
+  @property
+  def vocab_type(self):
+    return text_problems.VocabType.SUBWORD
