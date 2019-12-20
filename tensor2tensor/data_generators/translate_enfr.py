@@ -31,6 +31,7 @@ from tensor2tensor.data_generators.oov_text_encoder import OOVTokenTextEncoder
 from tensor2tensor.data_generators.text_encoder import EOS_ID
 from tensor2tensor.data_generators.text_problems import VocabType, text2text_generate_encoded
 from tensor2tensor.data_generators.translate import _preprocess_sgm
+from tensor2tensor.models.transformer import transformer_tall_pretrain_lm_tpu_adafactor
 from tensor2tensor.utils import registry, mlperf_log
 
 import tensorflow as tf
@@ -466,3 +467,16 @@ class LanguagemodelMultiLocalData(multi_problem.MultiProblem):
   @property
   def vocab_type(self):
     return text_problems.VocabType.SUBWORD
+
+@registry.register_hparams
+def transformer_mt_local_data():
+  """Hparams for transformer on LM pretraining on TPU, large model."""
+  hparams = transformer_tall_pretrain_lm_tpu_adafactor()
+  hparams.hidden_size = 1024
+  hparams.num_heads = 16
+  hparams.filter_size = 32768  # max fitting in 16G memory is 49152, batch 2
+  hparams.batch_size = 4
+  hparams.multiproblem_mixing_schedule = "constant"
+  # Task order: lm/en-de/en-fr.
+  hparams.multiproblem_per_task_threshold = "320,80,160"
+  return hparams
