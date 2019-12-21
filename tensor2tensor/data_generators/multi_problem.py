@@ -541,7 +541,8 @@ def aggregate_task_lm_losses(hparams,
   for task in hparams.problem.task_list:
     loss_num_, loss_den_ = loss(
         logits, feature,
-        lambda x: common_layers.weights_multi_problem_all(x, task.task_id),  # pylint: disable=cell-var-from-loop
+        # TODO: check this fix (the next commented line) is ok
+        #lambda x: common_layers.weights_multi_problem_all(x, task.task_id),  # pylint: disable=cell-var-from-loop
         hparams, vocab_size, weights_fn)
 
     loss_num += loss_num_
