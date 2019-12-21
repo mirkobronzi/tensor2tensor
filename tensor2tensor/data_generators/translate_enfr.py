@@ -578,11 +578,11 @@ class LanguagemodelMultiLocalData2(multi_problem.MultiProblem):
 @registry.register_hparams
 def transformer_mt_local_data():
   """Hparams for transformer on LM pretraining on TPU, large model."""
-  # hparams = transformer_tall_pretrain_lm_tpu_adafactor()
-  hparams = transformer_tiny()
-  # hparams.hidden_size = 1024
-  # hparams.num_heads = 16
-  # hparams.filter_size = 32768  # max fitting in 16G memory is 49152, batch 2
+  hparams = transformer_tall_pretrain_lm_tpu_adafactor()
+  #hparams = transformer_tiny()
+  hparams.hidden_size = 1024
+  hparams.num_heads = 16
+  hparams.filter_size = 32768  # max fitting in 16G memory is 49152, batch 2
   hparams.batch_size = 4
   hparams.multiproblem_mixing_schedule = "constant"
   hparams.multiproblem_per_task_threshold = "320,80,80"
