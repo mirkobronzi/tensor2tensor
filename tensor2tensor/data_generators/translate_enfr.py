@@ -31,7 +31,10 @@ from tensor2tensor.data_generators.oov_text_encoder import OOVTokenTextEncoder
 from tensor2tensor.data_generators.text_encoder import EOS_ID
 from tensor2tensor.data_generators.text_problems import VocabType, text2text_generate_encoded
 from tensor2tensor.data_generators.translate import _preprocess_sgm
-from tensor2tensor.models.transformer import transformer_tall_pretrain_lm_tpu_adafactor
+from tensor2tensor.data_generators.wiki_lm import LanguagemodelEnWiki32k, _FR_TRAIN_NAME_ID, \
+  _EN_TRAIN_NAME_ID, _FR_EVAL_NAME_ID, _EN_EVAL_NAME_ID, _FR_TEST_NAME_ID, _EN_TEST_NAME_ID
+from tensor2tensor.models.transformer import transformer_tall_pretrain_lm_tpu_adafactor, \
+  transformer_tiny
 from tensor2tensor.utils import registry, mlperf_log
 
 import tensorflow as tf
@@ -439,9 +442,31 @@ def extract_data(tmp_dir, data_split, filename, datatypes_to_clean=None):
 
 def get_input_target_names(data_split):
   lang_file_path = FLAGS.parsing_path
-  lang1_filepath = lang_file_path + '.' + data_split + '.lang1'
-  lang2_filepath = lang_file_path + '.' + data_split + '.lang2'
+  lang1_filepath = lang_file_path + '/' + data_split + '.lang1'
+  lang2_filepath = lang_file_path + '/' + data_split + '.lang2'
   return lang1_filepath, lang2_filepath
+
+
+@registry.register_problem
+class TranslateLocalDataMt2(TranslateLocalData):
+  pass
+
+
+@registry.register_problem
+class LanguagemodelEnFrWiki32k(LanguagemodelEnWiki32k):
+  """A language model on untokenized Wikipedia, 4 languages together."""
+
+  train_names_ids = [_FR_TRAIN_NAME_ID, _EN_TRAIN_NAME_ID]
+  eval_names_ids = [_FR_EVAL_NAME_ID, _EN_EVAL_NAME_ID]
+  test_names_ids = [_FR_TEST_NAME_ID, _EN_TEST_NAME_ID]
+
+  @property
+  def approx_vocab_size(self):
+    return 32000
+
+  @property
+  def max_samples_for_vocab(self):
+    return 256000  # Samples are intertwined, take more to cover 4 languages.
 
 @registry.register_problem
 class LanguagemodelMultiLocalData(multi_problem.MultiProblem):
@@ -450,9 +475,9 @@ class LanguagemodelMultiLocalData(multi_problem.MultiProblem):
   def __init__(self, was_reversed=False, was_copy=False):
     super(LanguagemodelMultiLocalData, self).__init__(
         was_reversed, was_copy)
-    self.task_list.append(wiki_lm.LanguagemodelDeEnFrRoWiki64k())
-    self.task_list.append(translate_ende.TranslateEndeWmtMulti64k())
-    self.task_list.append(TranslateEnfrWmtMulti64k())
+    self.task_list.append(LanguagemodelEnFrWiki32k())
+    self.task_list.append(TranslateLocalData())
+    self.task_list.append(TranslateLocalDataMt2())
     # self.task_list.append(translate_ende.TranslateEndeWmtMulti64k(
     #     was_reversed=True))
     # self.task_list.append(TranslateEnfrWmtMulti64k(
@@ -468,15 +493,97 @@ class LanguagemodelMultiLocalData(multi_problem.MultiProblem):
   def vocab_type(self):
     return text_problems.VocabType.SUBWORD
 
+@registry.register_problem
+class LanguagemodelLocalData(text_problems.Text2SelfProblem):
+  """A language model on the untokenized wikipedia corpus, English."""
+
+  train_names_ids = [_EN_TRAIN_NAME_ID]
+  eval_names_ids = [_EN_EVAL_NAME_ID]
+  test_names_ids = [_EN_TEST_NAME_ID]
+
+  @property
+  def approx_vocab_size(self):
+    return 32000
+
+  @property
+  def max_samples_for_vocab(self):
+    return 128000
+
+  @property
+  def combine_characters_threshold(self):
+    """Threshold for upto how many characters to combine in examples."""
+    return 512*8  # So we should have 512 tokens on average, maybe more.
+
+  def is_generate_per_split(self):
+    return True
+
+  @property
+  def dataset_splits(self):
+    """Splits of data to produce and number of output shards for each."""
+    return [{
+        "split": problem.DatasetSplit.TRAIN,
+        "shards": 100,
+    }, {
+        "split": problem.DatasetSplit.EVAL,
+        "shards": 1,
+    }, {
+        "split": problem.DatasetSplit.TEST,
+        "shards": 1,
+    }]
+
+  def generate_samples(
+      self,
+      data_dir,
+      tmp_dir,
+      dataset_split,
+      custom_iterator=text_problems.text2text_txt_iterator):
+    tag = "dev"
+    datatypes_to_clean = None
+    if dataset_split == problem.DatasetSplit.TRAIN:
+      tag = "train"
+      # datatypes_to_clean = self.datatypes_to_clean
+    data_path = extract_data(
+        tmp_dir, tag, "%s-compiled-%s" % (self.name, tag),
+        datatypes_to_clean=datatypes_to_clean)
+    return custom_iterator(data_path + ".lang1", data_path + ".lang2")
+
+
+
+@registry.register_problem
+class LanguagemodelMultiLocalData2(multi_problem.MultiProblem):
+  """Wiki multi-lingual LM and multiple translations."""
+
+  def __init__(self, was_reversed=False, was_copy=False):
+    super(LanguagemodelMultiLocalData2, self).__init__(
+        was_reversed, was_copy)
+    self.task_list.append(LanguagemodelLocalData())
+    self.task_list.append(TranslateLocalData())
+    self.task_list.append(TranslateLocalDataMt2())
+    # self.task_list.append(translate_ende.TranslateEndeWmtMulti64k(
+    #     was_reversed=True))
+    # self.task_list.append(TranslateEnfrWmtMulti64k(
+    #     was_reversed=True))
+    # self.task_list.append(translate_enro.TranslateEnroWmtMultiTiny64k(
+    #     was_reversed=True))
+    # self.task_list.append(
+    #     cnn_dailymail.SummarizeCnnDailymailWikiLMMultiVocab64k())
+    # self.task_list.append(multinli.MultiNLIWikiLMMultiVocab64k())
+    # self.task_list.append(squad.SquadConcatMulti64k())
+
+  @property
+  def vocab_type(self):
+    return text_problems.VocabType.SUBWORD
+
+
 @registry.register_hparams
 def transformer_mt_local_data():
   """Hparams for transformer on LM pretraining on TPU, large model."""
-  hparams = transformer_tall_pretrain_lm_tpu_adafactor()
-  hparams.hidden_size = 1024
-  hparams.num_heads = 16
-  hparams.filter_size = 32768  # max fitting in 16G memory is 49152, batch 2
+  # hparams = transformer_tall_pretrain_lm_tpu_adafactor()
+  hparams = transformer_tiny()
+  # hparams.hidden_size = 1024
+  # hparams.num_heads = 16
+  # hparams.filter_size = 32768  # max fitting in 16G memory is 49152, batch 2
   hparams.batch_size = 4
   hparams.multiproblem_mixing_schedule = "constant"
-  # Task order: lm/en-de/en-fr.
-  hparams.multiproblem_per_task_threshold = "320,80,160"
+  hparams.multiproblem_per_task_threshold = "320,80,80"
   return hparams
